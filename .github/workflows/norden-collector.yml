@@ -5,8 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "norden_collector.py"
-      - "norden_collector_v2.py"
+      - "norden_seed_transcriber.py"
       - "norden_collector_v3.py"
       - "requirements.txt"
       - ".github/workflows/norden-collector.yml"
@@ -18,12 +17,12 @@ permissions:
 
 concurrency:
   group: norden-collector
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -38,9 +37,6 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
-
       - name: Restore Whisper model cache
         uses: actions/cache@v4
         with:
@@ -49,17 +45,13 @@ jobs:
           restore-keys: |
             whisper-${{ runner.os }}-
 
-      - name: Collect, transcribe and analyze Norden
+      - name: Download and transcribe verified Norden videos
         env:
-          DOUYIN_PROFILE_URL: "https://v.douyin.com/JaidNObikLo/"
-          NORDEN_MAX_VIDEOS: "10"
           WHISPER_MODEL: "small.en"
           NORDEN_SEED_VIDEO_IDS: "7679312806105156916,7678516691764071732,7678180835652029730,7677804082693672242"
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_TEXT_MODEL: ${{ vars.OPENAI_TEXT_MODEL || 'gpt-5-mini' }}
-        run: python norden_collector_v3.py
+        run: python norden_seed_transcriber.py
 
-      - name: Commit extracted transcripts and analysis
+      - name: Commit extracted transcripts
         run: |
           git config user.name "ciro-norden-bot"
           git config user.email "ciro-norden-bot@users.noreply.github.com"
@@ -68,5 +60,6 @@ jobs:
             echo "No new Norden data"
           else
             git commit -m "data: update Norden transcripts"
+            git pull --rebase origin main
             git push
           fi
