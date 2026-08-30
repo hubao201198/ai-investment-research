@@ -1,0 +1,47 @@
+name: Norden Author Posts Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/norden-author-posts-probe.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch Gary Norden recent posts through signed Douyin API
+        shell: bash
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/RandallAnjie/Douyin-API.git /tmp/dyapi
+          cd /tmp/dyapi
+          node --input-type=module <<'NODE'
+          import { buildConfig } from './src/config.js'
+          import { fetchOneVideo, fetchUserPostVideos } from './src/douyin/crawler.js'
+          const seed='7679312806105156916'
+          const ctx={config:buildConfig({})}
+          const detail=await fetchOneVideo(ctx,seed)
+          const author=detail?.aweme_detail?.author || {}
+          const secUid=author.sec_uid || author.sec_user_id || ''
+          console.log('nickname', author.nickname)
+          console.log('sec_uid', secUid)
+          if(!secUid) throw new Error('No sec_uid from seed video')
+          const posts=await fetchUserPostVideos(ctx,secUid,0,20)
+          console.log('status_code',posts?.status_code)
+          console.log('has_more',posts?.has_more,'max_cursor',posts?.max_cursor)
+          const list=posts?.aweme_list || []
+          console.log('count',list.length)
+          for(const a of list){
+            const ts=Number(a.create_time||0)
+            console.log(JSON.stringify({
+              id:a.aweme_id,
+              create_time:ts,
+              date:ts?new Date(ts*1000).toISOString():'',
+              desc:a.desc||'',
+              nickname:a.author?.nickname||''
+            }))
+          }
+          NODE
