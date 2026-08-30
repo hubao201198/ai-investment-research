@@ -1,0 +1,84 @@
+name: Norden Signed Transcribe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "norden_signed_transcriber.py"
+      - ".github/workflows/norden-signed-transcribe.yml"
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve target Norden video using current Douyin signatures
+        shell: bash
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/RandallAnjie/Douyin-API.git /tmp/dyapi
+          cd /tmp/dyapi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import { buildConfig } from './src/config.js'
+          import { fetchOneVideo } from './src/douyin/crawler.js'
+          const targets = [
+            {id:'7679312806105156916', published_at:'2026-08-29'},
+          ]
+          const ctx={config:buildConfig({})}
+          const out=[]
+          for (const t of targets) {
+            const data=await fetchOneVideo(ctx,t.id)
+            const a=data?.aweme_detail
+            if (!a) throw new Error(`no aweme_detail for ${t.id}: ${JSON.stringify(data).slice(0,500)}`)
+            const v=a.video || {}
+            const rates=(Array.isArray(v.bit_rate)?v.bit_rate:[])
+              .map(x=>({rate:Number(x?.bit_rate||0),url:(x?.play_addr?.url_list||[])[0]}))
+              .filter(x=>x.url)
+              .sort((a,b)=>a.rate-b.rate)
+            const fallback=(v.play_addr?.url_list||v.download_addr?.url_list||[])[0]
+            const video_url=rates[0]?.url || fallback
+            if (!video_url) throw new Error(`no media URL for ${t.id}`)
+            out.push({
+              video_id:t.id,
+              published_at:t.published_at,
+              title:a.desc || '',
+              source_url:`https://www.douyin.com/video/${t.id}`,
+              video_url,
+              bitrate:rates[0]?.rate || null,
+            })
+            console.log('resolved', t.id, a.desc, 'bitrates=', rates.length, 'selected=', rates[0]?.rate)
+          }
+          fs.writeFileSync('/tmp/norden_urls.json', JSON.stringify(out,null,2))
+          NODE
+
+      - name: Install transcription dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install faster-whisper==1.2.0 requests httpx
+
+      - name: Download audio and transcribe
+        env:
+          WHISPER_MODEL: "small.en"
+          NORDEN_RESOLVED_JSON: "/tmp/norden_urls.json"
+          NORDEN_ARTIFACT_DIR: "/tmp/norden_transcripts"
+        run: python norden_signed_transcriber.py
+
+      - name: Show transcription status
+        run: cat /tmp/norden_transcripts/index.json
+
+      - name: Upload transcript artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: norden-transcript-7679312806105156916
+          path: /tmp/norden_transcripts
+          if-no-files-found: error
+          retention-days: 7
