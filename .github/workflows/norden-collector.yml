@@ -2,6 +2,12 @@ name: Norden Collector
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "norden_collector.py"
+      - "requirements.txt"
+      - ".github/workflows/norden-collector.yml"
   schedule:
     - cron: "7 * * * *"
 
