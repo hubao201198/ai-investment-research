@@ -7,6 +7,7 @@ on:
     paths:
       - "norden_collector.py"
       - "norden_collector_v2.py"
+      - "norden_collector_v3.py"
       - "requirements.txt"
       - ".github/workflows/norden-collector.yml"
   schedule:
@@ -51,16 +52,12 @@ jobs:
       - name: Collect, transcribe and analyze Norden
         env:
           DOUYIN_PROFILE_URL: "https://v.douyin.com/JaidNObikLo/"
-          NORDEN_AUTHOR_KEYWORDS: "Gary Norden,交易员Gary Norden"
           NORDEN_MAX_VIDEOS: "10"
           WHISPER_MODEL: "small.en"
-          KEEP_VIDEO: "0"
           NORDEN_SEED_VIDEO_IDS: "7679312806105156916,7678516691764071732,7678180835652029730,7677804082693672242"
-          DOUYIN_COOKIES_JSON: ${{ secrets.DOUYIN_COOKIES_JSON }}
-          DOUYIN_STORAGE_STATE_B64: ${{ secrets.DOUYIN_STORAGE_STATE_B64 }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_TEXT_MODEL: ${{ vars.OPENAI_TEXT_MODEL || 'gpt-5-mini' }}
-        run: python norden_collector_v2.py
+        run: python norden_collector_v3.py
 
       - name: Commit extracted transcripts and analysis
         run: |
