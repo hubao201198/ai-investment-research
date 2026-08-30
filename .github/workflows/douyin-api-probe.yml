@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          curl -v --max-time 30 --get 'http://175.24.234.153:8091/api/hybrid/video_data' \
+          curl -v --max-time 30 --get 'https://dy.chixiaotao.cn/api/hybrid/video_data' \
             --data-urlencode 'url=https://www.douyin.com/video/7679312806105156916' \
             --data-urlencode 'minimal=false' \
             -o /tmp/dy.json 2>/tmp/curl.log || true
@@ -34,7 +34,8 @@ jobs:
               d=json.loads(raw)
               print('top keys', list(d)[:20] if isinstance(d,dict) else type(d))
               data=d.get('data',{}) if isinstance(d,dict) else {}
-              print('desc', data.get('desc'))
+              print('code', d.get('code') if isinstance(d,dict) else None)
+              print('desc', data.get('desc') if isinstance(data,dict) else None)
               video=data.get('video',{}) if isinstance(data,dict) else {}
               for key in ('play_addr','play_addr_h264','download_addr'):
                   addr=video.get(key,{}) if isinstance(video,dict) else {}
