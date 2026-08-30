@@ -34,27 +34,34 @@ jobs:
           ]
           const ctx={config:buildConfig({})}
           const out=[]
+          const add=(arr,kind,url,rate=null)=>{
+            if(url && !arr.some(x=>x.url===url)) arr.push({kind,url,rate})
+          }
           for (const t of targets) {
             const data=await fetchOneVideo(ctx,t.id)
             const a=data?.aweme_detail
             if (!a) throw new Error(`no aweme_detail for ${t.id}: ${JSON.stringify(data).slice(0,500)}`)
             const v=a.video || {}
+            const candidates=[]
+            add(candidates,'play_addr',(v.play_addr?.url_list||[])[0])
+            add(candidates,'play_addr_h264',(v.play_addr_h264?.url_list||[])[0])
+            add(candidates,'download_addr',(v.download_addr?.url_list||[])[0])
+            add(candidates,'play_addr_265',(v.play_addr_265?.url_list||[])[0])
             const rates=(Array.isArray(v.bit_rate)?v.bit_rate:[])
               .map(x=>({rate:Number(x?.bit_rate||0),url:(x?.play_addr?.url_list||[])[0]}))
               .filter(x=>x.url)
               .sort((a,b)=>a.rate-b.rate)
-            const fallback=(v.play_addr?.url_list||v.download_addr?.url_list||[])[0]
-            const video_url=rates[0]?.url || fallback
-            if (!video_url) throw new Error(`no media URL for ${t.id}`)
+            for(const r of rates) add(candidates,'bit_rate',r.url,r.rate)
+            if (!candidates.length) throw new Error(`no media URLs for ${t.id}`)
             out.push({
               video_id:t.id,
               published_at:t.published_at,
               title:a.desc || '',
               source_url:`https://www.douyin.com/video/${t.id}`,
-              video_url,
-              bitrate:rates[0]?.rate || null,
+              video_urls:candidates.map(x=>x.url),
+              stream_candidates:candidates,
             })
-            console.log('resolved', t.id, a.desc, 'bitrates=', rates.length, 'selected=', rates[0]?.rate)
+            console.log('resolved', t.id, a.desc, 'candidates=', candidates.length, candidates.slice(0,4).map(x=>x.kind))
           }
           fs.writeFileSync('/tmp/norden_urls.json', JSON.stringify(out,null,2))
           NODE
