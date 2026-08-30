@@ -1,0 +1,70 @@
+name: Norden Collector
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: norden-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Restore Whisper model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-${{ runner.os }}-${{ env.WHISPER_MODEL }}
+          restore-keys: |
+            whisper-${{ runner.os }}-
+
+      - name: Collect, transcribe and analyze Norden
+        env:
+          DOUYIN_PROFILE_URL: "https://v.douyin.com/JaidNObikLo/"
+          NORDEN_AUTHOR_KEYWORDS: "Gary Norden,交易员Gary Norden"
+          NORDEN_LOOKBACK_DAYS: "7"
+          NORDEN_MAX_VIDEOS: "12"
+          WHISPER_MODEL: "small.en"
+          KEEP_VIDEO: "0"
+          # Seed the newest confirmed video so the first run can work even if profile discovery is blocked.
+          NORDEN_SEED_VIDEO_IDS: "7679312806105156916,7678516691764071732,7678180835652029730,7677804082693672242,7675968110536477962"
+          DOUYIN_COOKIES_JSON: ${{ secrets.DOUYIN_COOKIES_JSON }}
+          DOUYIN_STORAGE_STATE_B64: ${{ secrets.DOUYIN_STORAGE_STATE_B64 }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_TEXT_MODEL: ${{ vars.OPENAI_TEXT_MODEL || 'gpt-5-mini' }}
+        run: python norden_collector.py
+
+      - name: Commit extracted transcripts and analysis
+        run: |
+          git config user.name "ciro-norden-bot"
+          git config user.email "ciro-norden-bot@users.noreply.github.com"
+          git add data/norden || true
+          if git diff --cached --quiet; then
+            echo "No new Norden data"
+          else
+            git commit -m "data: update Norden transcripts"
+            git push
+          fi
