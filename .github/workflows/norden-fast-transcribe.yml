@@ -1,0 +1,44 @@
+name: Norden Fast Transcribe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "norden_seed_transcriber.py"
+      - ".github/workflows/norden-fast-transcribe.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ffmpeg and transcription dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install faster-whisper==1.2.0
+      - name: Fetch and transcribe Norden videos
+        env:
+          WHISPER_MODEL: "small.en"
+          NORDEN_SEED_VIDEO_IDS: "7679312806105156916,7678516691764071732,7678180835652029730,7677804082693672242"
+        run: python norden_seed_transcriber.py
+      - name: Commit results
+        run: |
+          git config user.name "ciro-norden-bot"
+          git config user.email "ciro-norden-bot@users.noreply.github.com"
+          git add data/norden || true
+          if git diff --cached --quiet; then
+            echo "No new data"
+          else
+            git commit -m "data: fast Norden transcripts"
+            git pull --rebase origin main
+            git push
+          fi
