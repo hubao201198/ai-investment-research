@@ -1,0 +1,49 @@
+name: Douyin API Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/douyin-api-probe.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe current public Douyin parser
+        shell: bash
+        run: |
+          set -o pipefail
+          curl -v --max-time 30 --get 'http://175.24.234.153:8091/api/hybrid/video_data' \
+            --data-urlencode 'url=https://www.douyin.com/video/7679312806105156916' \
+            --data-urlencode 'minimal=false' \
+            -o /tmp/dy.json 2>/tmp/curl.log || true
+          echo '=== curl ==='
+          tail -60 /tmp/curl.log || true
+          echo '=== response ==='
+          python - <<'PY'
+          import json, pathlib
+          p=pathlib.Path('/tmp/dy.json')
+          print('bytes', p.stat().st_size if p.exists() else 0)
+          if not p.exists(): raise SystemExit
+          raw=p.read_text('utf-8',errors='replace')
+          print(raw[:1000])
+          try:
+              d=json.loads(raw)
+              print('top keys', list(d)[:20] if isinstance(d,dict) else type(d))
+              data=d.get('data',{}) if isinstance(d,dict) else {}
+              print('desc', data.get('desc'))
+              video=data.get('video',{}) if isinstance(data,dict) else {}
+              for key in ('play_addr','play_addr_h264','download_addr'):
+                  addr=video.get(key,{}) if isinstance(video,dict) else {}
+                  urls=addr.get('url_list',[]) if isinstance(addr,dict) else []
+                  if urls: print(key, urls[0][:500])
+              br=video.get('bit_rate',[]) if isinstance(video,dict) else []
+              print('bitrates', len(br) if isinstance(br,list) else 0)
+              if isinstance(br,list) and br:
+                  print('first bitrate urls', (br[0].get('play_addr') or {}).get('url_list',[])[:1])
+          except Exception as e:
+              print('json error',e)
+          PY
