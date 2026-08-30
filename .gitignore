@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.part
+data/norden/*/video.mp4
+data/norden/*/audio.wav
