@@ -25,16 +25,6 @@ def now() -> str:
     return datetime.now(TZ).isoformat(timespec="seconds")
 
 
-def extract_audio(video: Path, wav: Path) -> None:
-    p = subprocess.run(
-        ["ffmpeg", "-y", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
-        capture_output=True,
-        timeout=240,
-    )
-    if p.returncode != 0:
-        raise RuntimeError(p.stderr.decode("utf-8", "ignore")[-1500:])
-
-
 def download(url: str, out: Path) -> int:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36",
@@ -54,6 +44,47 @@ def download(url: str, out: Path) -> int:
     return total
 
 
+def has_audio(video: Path) -> bool:
+    p = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", str(video)],
+        capture_output=True,
+        timeout=60,
+    )
+    return p.returncode == 0 and bool(p.stdout.strip())
+
+
+def select_muxed_video(urls: list[str], out: Path) -> tuple[str, int]:
+    seen = set()
+    errors = []
+    for i, url in enumerate(urls[:16], 1):
+        if not isinstance(url, str) or not url.startswith("http") or url in seen:
+            continue
+        seen.add(url)
+        out.unlink(missing_ok=True)
+        try:
+            size = download(url, out)
+            audio = has_audio(out)
+            print(f"[candidate] {i}: {size/1024/1024:.2f} MB audio={audio}")
+            if audio:
+                return url, size
+            errors.append(f"candidate {i}: no audio")
+        except Exception as e:
+            errors.append(f"candidate {i}: {type(e).__name__}: {e}")
+            print(f"[candidate-error] {i}: {type(e).__name__}: {e}")
+    out.unlink(missing_ok=True)
+    raise RuntimeError("no muxed video with audio found; " + "; ".join(errors[-8:]))
+
+
+def extract_audio(video: Path, wav: Path) -> None:
+    p = subprocess.run(
+        ["ffmpeg", "-y", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
+        capture_output=True,
+        timeout=240,
+    )
+    if p.returncode != 0:
+        raise RuntimeError(p.stderr.decode("utf-8", "ignore")[-1500:])
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     items = json.loads(INPUT.read_text("utf-8"))
@@ -64,6 +95,8 @@ def main() -> None:
         vid = str(item["video_id"])
         d = OUT / vid
         d.mkdir(parents=True, exist_ok=True)
+        video = d / "video.mp4"
+        wav = d / "audio.wav"
         meta = {
             "video_id": vid,
             "title": item.get("title", ""),
@@ -73,10 +106,13 @@ def main() -> None:
             "updated_at": now(),
         }
         try:
-            video = d / "video.mp4"
-            wav = d / "audio.wav"
-            size = download(item["video_url"], video)
-            print(f"[download] {vid}: {size/1024/1024:.2f} MB")
+            urls = item.get("video_urls") or ([item["video_url"]] if item.get("video_url") else [])
+            selected_url, size = select_muxed_video(urls, video)
+            meta["selected_stream_kind"] = next(
+                (x.get("kind") for x in item.get("stream_candidates", []) if x.get("url") == selected_url),
+                None,
+            )
+            print(f"[download] {vid}: selected muxed stream, {size/1024/1024:.2f} MB")
             extract_audio(video, wav)
             segments, info = model.transcribe(
                 str(wav),
@@ -105,12 +141,13 @@ def main() -> None:
                 "transcript_chars": len(transcript),
                 "updated_at": now(),
             })
-            video.unlink(missing_ok=True)
-            wav.unlink(missing_ok=True)
         except Exception as e:
             meta["status"] = "error"
             meta["error"] = f"{type(e).__name__}: {e}"
             print(f"[error] {vid}: {meta['error']}")
+        finally:
+            video.unlink(missing_ok=True)
+            wav.unlink(missing_ok=True)
         (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), "utf-8")
         index.append(meta)
 
