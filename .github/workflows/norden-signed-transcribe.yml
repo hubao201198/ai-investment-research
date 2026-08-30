@@ -10,8 +10,21 @@ on:
 
 jobs:
   transcribe:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - video_id: "7679312806105156916"
+            published_at: "2026-08-29"
+          - video_id: "7678516691764071732"
+            published_at: "2026-08-27"
+          - video_id: "7678180835652029730"
+            published_at: "2026-08-26"
+          - video_id: "7677804082693672242"
+            published_at: "2026-08-25"
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -19,8 +32,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve recent Norden videos using current Douyin signatures
+      - name: Resolve one Norden video using current Douyin signatures
         shell: bash
+        env:
+          VIDEO_ID: ${{ matrix.video_id }}
+          PUBLISHED_AT: ${{ matrix.published_at }}
         run: |
           set -e
           git clone --depth 1 https://github.com/RandallAnjie/Douyin-API.git /tmp/dyapi
@@ -29,44 +45,48 @@ jobs:
           import fs from 'node:fs'
           import { buildConfig } from './src/config.js'
           import { fetchOneVideo } from './src/douyin/crawler.js'
-          const targets = [
-            {id:'7679312806105156916', published_at:'2026-08-29'},
-            {id:'7678516691764071732', published_at:'2026-08-27'},
-            {id:'7678180835652029730', published_at:'2026-08-26'},
-            {id:'7677804082693672242', published_at:'2026-08-25'},
-          ]
-          const ctx={config:buildConfig({})}
-          const out=[]
+          const id=process.env.VIDEO_ID
+          const published_at=process.env.PUBLISHED_AT
           const add=(arr,kind,url,rate=null)=>{
             if(url && !arr.some(x=>x.url===url)) arr.push({kind,url,rate})
           }
-          for (const t of targets) {
-            const data=await fetchOneVideo(ctx,t.id)
-            const a=data?.aweme_detail
-            if (!a) throw new Error(`no aweme_detail for ${t.id}: ${JSON.stringify(data).slice(0,500)}`)
-            const v=a.video || {}
-            const candidates=[]
-            add(candidates,'play_addr',(v.play_addr?.url_list||[])[0])
-            add(candidates,'play_addr_h264',(v.play_addr_h264?.url_list||[])[0])
-            add(candidates,'download_addr',(v.download_addr?.url_list||[])[0])
-            add(candidates,'play_addr_265',(v.play_addr_265?.url_list||[])[0])
-            const rates=(Array.isArray(v.bit_rate)?v.bit_rate:[])
-              .map(x=>({rate:Number(x?.bit_rate||0),url:(x?.play_addr?.url_list||[])[0]}))
-              .filter(x=>x.url)
-              .sort((a,b)=>a.rate-b.rate)
-            for(const r of rates) add(candidates,'bit_rate',r.url,r.rate)
-            if (!candidates.length) throw new Error(`no media URLs for ${t.id}`)
-            out.push({
-              video_id:t.id,
-              published_at:t.published_at,
-              title:a.desc || '',
-              source_url:`https://www.douyin.com/video/${t.id}`,
-              video_urls:candidates.map(x=>x.url),
-              stream_candidates:candidates,
-            })
-            console.log('resolved', t.id, a.desc, 'candidates=', candidates.length, candidates.slice(0,4).map(x=>x.kind))
+          let data=null
+          let lastErr=null
+          for(let attempt=1; attempt<=3; attempt++){
+            try{
+              const ctx={config:buildConfig({})}
+              data=await fetchOneVideo(ctx,id)
+              if(data?.aweme_detail) break
+            }catch(e){
+              lastErr=e
+              console.error(`resolve attempt ${attempt} failed:`, e?.message || String(e))
+              await new Promise(r=>setTimeout(r, 2500*attempt))
+            }
           }
+          const a=data?.aweme_detail
+          if (!a) throw lastErr || new Error(`no aweme_detail for ${id}`)
+          const v=a.video || {}
+          const candidates=[]
+          add(candidates,'play_addr',(v.play_addr?.url_list||[])[0])
+          add(candidates,'play_addr_h264',(v.play_addr_h264?.url_list||[])[0])
+          add(candidates,'download_addr',(v.download_addr?.url_list||[])[0])
+          add(candidates,'play_addr_265',(v.play_addr_265?.url_list||[])[0])
+          const rates=(Array.isArray(v.bit_rate)?v.bit_rate:[])
+            .map(x=>({rate:Number(x?.bit_rate||0),url:(x?.play_addr?.url_list||[])[0]}))
+            .filter(x=>x.url)
+            .sort((a,b)=>a.rate-b.rate)
+          for(const r of rates) add(candidates,'bit_rate',r.url,r.rate)
+          if (!candidates.length) throw new Error(`no media URLs for ${id}`)
+          const out=[{
+            video_id:id,
+            published_at,
+            title:a.desc || '',
+            source_url:`https://www.douyin.com/video/${id}`,
+            video_urls:candidates.map(x=>x.url),
+            stream_candidates:candidates,
+          }]
           fs.writeFileSync('/tmp/norden_urls.json', JSON.stringify(out,null,2))
+          console.log('resolved',id,a.desc,'candidates=',candidates.length)
           NODE
 
       - name: Install transcription dependencies
@@ -88,7 +108,7 @@ jobs:
       - name: Upload transcript artifact
         uses: actions/upload-artifact@v4
         with:
-          name: norden-recent-week-transcripts
+          name: norden-transcript-${{ matrix.video_id }}
           path: /tmp/norden_transcripts
           if-no-files-found: error
           retention-days: 7
