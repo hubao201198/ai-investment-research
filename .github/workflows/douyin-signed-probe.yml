@@ -1,0 +1,40 @@
+name: Douyin Signed Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/douyin-signed-probe.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Probe signed Douyin detail API
+        shell: bash
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/RandallAnjie/Douyin-API.git /tmp/dyapi
+          cd /tmp/dyapi
+          node --input-type=module <<'NODE'
+          import { buildConfig } from './src/config.js'
+          import { fetchOneVideo } from './src/douyin/crawler.js'
+          const id='7679312806105156916'
+          const ctx={config:buildConfig({})}
+          try {
+            const data=await fetchOneVideo(ctx,id)
+            console.log('keys', Object.keys(data || {}))
+            console.log('status_code', data?.status_code)
+            console.log('has_aweme', !!data?.aweme_detail)
+            console.log('desc', data?.aweme_detail?.desc || '')
+            const v=data?.aweme_detail?.video || {}
+            console.log('bitrate_count', Array.isArray(v.bit_rate)?v.bit_rate.length:0)
+            const url=(v.bit_rate?.[0]?.play_addr?.url_list || v.play_addr?.url_list || [])[0] || ''
+            console.log('video_url', url.slice(0,1000))
+          } catch(e) {
+            console.error('ERROR',e?.stack || String(e))
+            process.exitCode=2
+          }
+          NODE
