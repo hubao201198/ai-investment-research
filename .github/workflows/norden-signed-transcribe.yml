@@ -11,7 +11,7 @@ on:
 jobs:
   transcribe:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve target Norden video using current Douyin signatures
+      - name: Resolve recent Norden videos using current Douyin signatures
         shell: bash
         run: |
           set -e
@@ -31,6 +31,9 @@ jobs:
           import { fetchOneVideo } from './src/douyin/crawler.js'
           const targets = [
             {id:'7679312806105156916', published_at:'2026-08-29'},
+            {id:'7678516691764071732', published_at:'2026-08-27'},
+            {id:'7678180835652029730', published_at:'2026-08-26'},
+            {id:'7677804082693672242', published_at:'2026-08-25'},
           ]
           const ctx={config:buildConfig({})}
           const out=[]
@@ -85,7 +88,7 @@ jobs:
       - name: Upload transcript artifact
         uses: actions/upload-artifact@v4
         with:
-          name: norden-transcript-7679312806105156916
+          name: norden-recent-week-transcripts
           path: /tmp/norden_transcripts
           if-no-files-found: error
           retention-days: 7
