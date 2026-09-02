@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-02T17:29:46+08:00",
+  "updated_at": "2026-09-02T22:21:49+08:00",
   "mode": "seed-ssr-smoke",
   "videos": [
     {
@@ -9,7 +9,7 @@
       "share_url": "https://www.iesdouyin.com/share/video/7679312806105156916/",
       "status": "media_unavailable",
       "media_url": null,
-      "updated_at": "2026-09-02T17:29:43+08:00"
+      "updated_at": "2026-09-02T22:21:46+08:00"
     },
     {
       "video_id": "7678516691764071732",
@@ -18,7 +18,7 @@
       "share_url": "https://www.iesdouyin.com/share/video/7678516691764071732/",
       "status": "media_unavailable",
       "media_url": null,
-      "updated_at": "2026-09-02T17:29:44+08:00"
+      "updated_at": "2026-09-02T22:21:47+08:00"
     },
     {
       "video_id": "7678180835652029730",
@@ -27,7 +27,7 @@
       "share_url": "https://www.iesdouyin.com/share/video/7678180835652029730/",
       "status": "media_unavailable",
       "media_url": null,
-      "updated_at": "2026-09-02T17:29:45+08:00"
+      "updated_at": "2026-09-02T22:21:48+08:00"
     },
     {
       "video_id": "7677804082693672242",
@@ -36,7 +36,7 @@
       "share_url": "https://www.iesdouyin.com/share/video/7677804082693672242/",
       "status": "media_unavailable",
       "media_url": null,
-      "updated_at": "2026-09-02T17:29:46+08:00"
+      "updated_at": "2026-09-02T22:21:48+08:00"
     }
   ]
 }
